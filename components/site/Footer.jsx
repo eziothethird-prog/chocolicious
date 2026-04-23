@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Instagram, Facebook, MapPin, Mail, Phone } from 'lucide-react';
+import NewsletterForm from '@/components/site/NewsletterForm';
 
 export default function Footer() {
   return (
@@ -31,12 +32,13 @@ export default function Footer() {
           </ul>
         </div>
         <div>
-          <h4 className="font-display text-lg mb-4 text-choco-gold">Ikuti Kami</h4>
-          <div className="flex gap-3">
+          <h4 className="font-display text-lg mb-4 text-choco-gold">Newsletter</h4>
+          <NewsletterForm />
+          <div className="flex gap-3 mt-4">
             <a href="https://instagram.com" target="_blank" rel="noopener" className="w-10 h-10 rounded-full bg-choco-milk/30 hover:bg-choco-gold hover:text-choco-dark flex items-center justify-center transition"><Instagram size={18}/></a>
             <a href="https://facebook.com" target="_blank" rel="noopener" className="w-10 h-10 rounded-full bg-choco-milk/30 hover:bg-choco-gold hover:text-choco-dark flex items-center justify-center transition"><Facebook size={18}/></a>
           </div>
-          <p className="text-xs mt-6 text-choco-cream/60">Bersertifikat Halal • Sejak 2017</p>
+          <p className="text-xs mt-4 text-choco-cream/60">Bersertifikat Halal • Sejak 2017</p>
         </div>
       </div>
       <div className="border-t border-choco-milk/40">

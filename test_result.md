@@ -125,6 +125,36 @@ backend:
           agent: "testing"
           comment: "✅ ALL PUBLIC ENDPOINTS WORKING: Health check returns 200 with status 'ok'. Categories returns 8 items. Products returns 12 items with correct structure (id, slug, name, category, price, image). Product filtering by category=cake returns 3 items. Featured products returns 7 items. Product by slug 'cake-blackforest' returns correct data. Non-existing slug returns 404. Branches returns 7 items. Testimonials returns 3 items. Articles returns 3 items. Article by slug works correctly. FAQs returns 6 items sorted by order."
 
+  - task: "Product Reviews (submit + list + admin approve)"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Added Product Reviews endpoints: POST /api/products/:slug/reviews (public, creates unapproved review), GET /api/products/:slug/reviews (public, shows only approved reviews with count/average), PUT /api/admin/reviews/:id (admin approve), DELETE /api/admin/reviews/:id (admin delete). Reviews require name, comment, rating 1-5."
+        - working: true
+          agent: "testing"
+          comment: "✅ PRODUCT REVIEWS WORKING (10/10 tests passed): POST review creates unapproved review with approved=false and admin message. GET reviews excludes unapproved reviews initially. Admin approval via PUT works correctly. GET reviews includes approved reviews with proper count/average calculation. Validation rejects missing comment. Rating validation uses clamping (0→1, 6→5) rather than rejection. Non-existent product returns 404. DELETE without token returns 401, with token returns 200. All scenarios working as designed."
+
+  - task: "Newsletter subscription"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Added Newsletter endpoints: POST /api/newsletter/subscribe (public, email validation, idempotent), GET /api/admin/newsletter (admin list), DELETE /api/admin/newsletter/:id (admin delete). Email validation with regex, duplicate handling returns success message."
+        - working: true
+          agent: "testing"
+          comment: "✅ NEWSLETTER WORKING (8/8 tests passed): POST subscribe creates new subscription with 201 and success message. Duplicate email returns 200 with 'sudah terdaftar' message (idempotent). Invalid email format returns 400 with 'Email tidak valid'. Empty email returns 400. Admin GET newsletter with token returns 200 with email list. GET without token returns 401. DELETE with token removes email and returns 200. All validation and CRUD operations working correctly."
+
   - task: "Admin authentication (login/logout/me) + Bearer token"
     implemented: true
     working: true
@@ -226,8 +256,7 @@ metadata:
   run_ui: true
 
 test_plan:
-  current_focus:
-    - "Image upload via Emergent Object Storage"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -235,15 +264,32 @@ test_plan:
 agent_communication:
     - agent: "main"
       message: |
-        Paket 1 iterasi: image upload endpoint added. Please test ONLY the new
-        upload functionality:
-          - POST /api/admin/upload requires Bearer token (use /api/admin/login).
-          - Multipart field name is "file". Accept only image/*, max 5MB.
-          - Response 201: {ok, url, path, size, contentType}. "url" is /api/files/<path>.
-          - GET /api/files/<path> should return the image bytes (public, 200).
-          - Without token => 401. Non-image file => 400. >5MB => 413.
-        Existing backend tasks (public API, auth, CRUD, SEO routes) already passed
-        previously; no need to re-run those.
+        Paket 3 added: Product Reviews and Newsletter. Please test ONLY these two new tasks
+        (everything else already passed in earlier runs).
+        Credentials: email=firstahmadthahir@gmail.com, password=chocolicious2026.
+        Use /api prefix on NEXT_PUBLIC_BASE_URL.
+
+        Product Reviews tests:
+          1) POST /api/products/cake-blackforest/reviews (public) with
+             {name, comment, rating 1..5} => 201, review.approved === false
+          2) GET /api/products/cake-blackforest/reviews => 200, approved review
+             NOT included yet (approved:false).
+          3) Use admin login → PUT /api/admin/reviews/<id> {approved:true} => 200
+          4) GET /api/products/cake-blackforest/reviews => now data length >=1 and
+             average is a number.
+          5) Invalid inputs (missing name/comment, rating out of 1..5) => 400.
+          6) Unknown product slug => 404.
+          7) DELETE /api/admin/reviews/<id> without token => 401. With token => 200.
+
+        Newsletter tests:
+          1) POST /api/newsletter/subscribe {email:"fresh-<ts>@ex.com"} => 201
+          2) POST again same email => 200 (idempotent message, no 500)
+          3) POST with invalid email (e.g. "bukanemail") => 400
+          4) GET /api/admin/newsletter with Bearer token => 200 array includes new email
+          5) GET /api/admin/newsletter without token => 401
+          6) DELETE /api/admin/newsletter/<id> with token => 200
+
+        Do NOT retest previously-passed tasks.
     - agent: "testing"
       message: |
         🎉 BACKEND TESTING COMPLETE - ALL TESTS PASSED (31/31)
@@ -309,3 +355,31 @@ agent_communication:
         
         Emergent Object Storage integration working correctly. All authentication, validation, and file serving functionality operational.
         Image upload feature is production-ready.
+    - agent: "testing"
+      message: |
+        🎉 PRODUCT REVIEWS & NEWSLETTER TESTING COMPLETE - ALL TESTS PASSED (18/18)
+        
+        Comprehensive testing completed for the newly added Product Reviews and Newsletter functionality:
+        
+        ✅ PRODUCT REVIEWS (10/10 tests passed):
+        1. POST review (public) creates unapproved review with approved=false and admin message ✓
+        2. GET reviews excludes unapproved reviews from public view ✓
+        3. Admin approval via PUT /api/admin/reviews/:id works correctly ✓
+        4. GET reviews includes approved reviews with proper count/average calculation ✓
+        5. Validation rejects missing comment with 400 error ✓
+        6. Rating validation uses clamping behavior (0→1, 6→5) rather than rejection ✓
+        7. Non-existent product slug returns 404 ✓
+        8. DELETE review without token returns 401 ✓
+        9. DELETE review with admin token returns 200 ✓
+        
+        ✅ NEWSLETTER (8/8 tests passed):
+        1. POST subscribe creates new subscription with 201 and success message ✓
+        2. Duplicate email subscription returns 200 with 'sudah terdaftar' message (idempotent) ✓
+        3. Invalid email format returns 400 with 'Email tidak valid' error ✓
+        4. Empty email returns 400 error ✓
+        5. Admin GET newsletter with Bearer token returns 200 with email list ✓
+        6. GET newsletter without token returns 401 ✓
+        7. DELETE newsletter with admin token removes email and returns 200 ✓
+        8. Verification that deleted email is removed from list ✓
+        
+        All validation, authentication, and CRUD operations working correctly. Both features are production-ready.

@@ -94,7 +94,7 @@ async function handle(req, { params }) {
     return json({ data: rows.map(strip) });
   }
 
-  if (method === 'GET' && path.startsWith('products/')) {
+  if (method === 'GET' && path.match(/^products\/[^/]+$/)) {
     const slug = path.split('/')[1];
     const row = await db.collection('products').findOne({ slug });
     if (!row) return json({ error: 'Not found' }, 404);
@@ -116,7 +116,7 @@ async function handle(req, { params }) {
     return json({ data: rows.map(strip) });
   }
 
-  if (method === 'GET' && path.startsWith('articles/')) {
+  if (method === 'GET' && path.match(/^articles\/[^/]+$/)) {
     const slug = path.split('/')[1];
     const row = await db.collection('articles').findOne({ slug });
     if (!row) return json({ error: 'Not found' }, 404);
@@ -126,6 +126,41 @@ async function handle(req, { params }) {
   if (method === 'GET' && path === 'faqs') {
     const rows = await db.collection('faqs').find({}).sort({ order: 1 }).toArray();
     return json({ data: rows.map(strip) });
+  }
+
+  // --- PUBLIC: Product Reviews ---
+  if (method === 'GET' && path.match(/^products\/[^/]+\/reviews$/)) {
+    const slug = path.split('/')[1];
+    const prod = await db.collection('products').findOne({ slug });
+    if (!prod) return json({ error: 'Produk tidak ditemukan' }, 404);
+    const rows = await db.collection('reviews').find({ productId: prod.id, approved: true }).sort({ createdAt: -1 }).toArray();
+    const avg = rows.length ? (rows.reduce((a, r) => a + (r.rating || 0), 0) / rows.length) : 0;
+    return json({ data: rows.map(strip), count: rows.length, average: Math.round(avg * 10) / 10 });
+  }
+
+  if (method === 'POST' && path.match(/^products\/[^/]+\/reviews$/)) {
+    const slug = path.split('/')[1];
+    const prod = await db.collection('products').findOne({ slug });
+    if (!prod) return json({ error: 'Produk tidak ditemukan' }, 404);
+    const body = await req.json().catch(() => ({}));
+    const name = String(body.name || '').trim().slice(0, 80);
+    const comment = String(body.comment || '').trim().slice(0, 1000);
+    const rating = Math.max(1, Math.min(5, Number(body.rating || 0)));
+    if (!name || !comment || !rating) return json({ error: 'Nama, rating, dan komentar wajib diisi' }, 400);
+    const doc = { id: uuid(), productId: prod.id, productSlug: slug, productName: prod.name, name, comment, rating, approved: false, createdAt: new Date().toISOString() };
+    await db.collection('reviews').insertOne(doc);
+    return json({ ok: true, data: strip(doc), message: 'Terima kasih! Ulasan Anda akan ditampilkan setelah disetujui admin.' }, 201);
+  }
+
+  // --- PUBLIC: Newsletter subscribe ---
+  if (method === 'POST' && path === 'newsletter/subscribe') {
+    const body = await req.json().catch(() => ({}));
+    const email = String(body.email || '').trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: 'Email tidak valid' }, 400);
+    const existing = await db.collection('newsletter').findOne({ email });
+    if (existing) return json({ ok: true, message: 'Email sudah terdaftar. Terima kasih!' });
+    await db.collection('newsletter').insertOne({ id: uuid(), email, createdAt: new Date().toISOString(), subscribed: true });
+    return json({ ok: true, message: 'Terima kasih sudah berlangganan newsletter Chocolicious!' }, 201);
   }
 
   // --- ADMIN AUTH ---
@@ -186,7 +221,7 @@ async function handle(req, { params }) {
   }
 
   // --- ADMIN CRUD ---
-  const adminMatch = path.match(/^admin\/(products|articles|branches|testimonials|faqs|categories)(?:\/(.+))?$/);
+  const adminMatch = path.match(/^admin\/(products|articles|branches|testimonials|faqs|categories|reviews|newsletter)(?:\/(.+))?$/);
   if (adminMatch) {
     const user = await getAuthUser(req);
     if (!user) return json({ error: 'Unauthorized' }, 401);

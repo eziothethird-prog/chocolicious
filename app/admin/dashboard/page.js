@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { LogOut, Package, FileText, Store, Star, Plus, Edit, Trash2, X, Check } from 'lucide-react';
+import { LogOut, Package, FileText, Store, Star, Plus, Edit, Trash2, X, Check, MessageSquare, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import ImageUploader from '@/components/admin/ImageUploader';
 import RichTextEditor from '@/components/admin/RichTextEditor';
@@ -11,6 +11,8 @@ const TABS = [
   { key: 'articles', label: 'Artikel', icon: FileText },
   { key: 'branches', label: 'Cabang', icon: Store },
   { key: 'testimonials', label: 'Testimoni', icon: Star },
+  { key: 'reviews', label: 'Ulasan', icon: MessageSquare },
+  { key: 'newsletter', label: 'Newsletter', icon: Mail },
 ];
 
 const FIELDS = {
@@ -50,6 +52,17 @@ const FIELDS = {
     { key: 'message', label: 'Pesan', type: 'textarea', required: true },
     { key: 'image', label: 'Foto', type: 'image' },
     { key: 'active', label: 'Aktif', type: 'checkbox' },
+  ],
+  reviews: [
+    { key: 'name', label: 'Nama', type: 'text' },
+    { key: 'productName', label: 'Produk', type: 'text' },
+    { key: 'rating', label: 'Rating (1-5)', type: 'number' },
+    { key: 'comment', label: 'Komentar', type: 'textarea' },
+    { key: 'approved', label: 'Disetujui (tampil di website)', type: 'checkbox' },
+  ],
+  newsletter: [
+    { key: 'email', label: 'Email', type: 'email' },
+    { key: 'subscribed', label: 'Aktif', type: 'checkbox' },
   ],
 };
 
@@ -174,16 +187,21 @@ export default function Dashboard() {
                   {items.map(it => (
                     <tr key={it.id} className="border-t border-choco-cream/60 hover:bg-choco-cream/20">
                       <td className="px-4 py-3">
-                        {(it.image || it.thumbnail) ? <img src={it.image || it.thumbnail} alt="" className="w-12 h-12 rounded-lg object-cover"/> : <div className="w-12 h-12 rounded-lg bg-choco-cream"/>}
+                        {(it.image || it.thumbnail) ? <img src={it.image || it.thumbnail} alt="" className="w-12 h-12 rounded-lg object-cover"/> : <div className="w-12 h-12 rounded-lg bg-choco-cream flex items-center justify-center text-choco-milk/60">{tab==='reviews' ? <MessageSquare size={16}/> : tab==='newsletter' ? <Mail size={16}/> : null}</div>}
                       </td>
-                      <td className="px-4 py-3 font-medium text-choco-dark">{it.name || it.title}</td>
+                      <td className="px-4 py-3 font-medium text-choco-dark">{it.name || it.title || it.email}</td>
                       <td className="px-4 py-3 text-choco-milk">
                         {tab==='products' && <span>{it.category} • Rp {Number(it.price||0).toLocaleString('id-ID')}</span>}
                         {tab==='articles' && <span>{it.category} {it.published ? <span className="text-green-600">• Published</span> : <span className="text-red-600">• Draft</span>}</span>}
                         {tab==='branches' && <span className="line-clamp-1">{it.address}</span>}
                         {tab==='testimonials' && <span>{it.role}</span>}
+                        {tab==='reviews' && <span className="flex items-center gap-2"><span className="text-choco-gold">{'★'.repeat(it.rating || 0)}</span> <span className="line-clamp-1 text-xs">{it.productName}</span> {it.approved ? <span className="text-green-600 text-xs">• Approved</span> : <span className="text-orange-500 text-xs">• Pending</span>}</span>}
+                        {tab==='newsletter' && <span className="text-xs">{new Date(it.createdAt).toLocaleDateString('id-ID')}</span>}
                       </td>
                       <td className="px-4 py-3 text-right">
+                        {tab==='reviews' && !it.approved && (
+                          <button onClick={async () => { await apiCall('PUT', `admin/reviews/${it.id}`, { approved: true }); toast.success('Disetujui'); load(); }} className="inline-flex items-center gap-1 text-green-600 hover:text-green-800 px-2" title="Setujui"><Check size={14}/></button>
+                        )}
                         <button onClick={()=>openEdit(it)} className="inline-flex items-center gap-1 text-choco-dark hover:text-choco-gold px-2"><Edit size={14}/></button>
                         <button onClick={()=>remove(it.id)} className="inline-flex items-center gap-1 text-red-500 hover:text-red-700 px-2"><Trash2 size={14}/></button>
                       </td>

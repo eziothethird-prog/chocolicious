@@ -1,4 +1,5 @@
 import SiteShell from '@/components/site/SiteShell';
+import ReviewSection from '@/components/site/ReviewSection';
 import Link from 'next/link';
 import { apiFetch, formatIDR, waOrderUrl } from '@/lib/client';
 import { ShoppingBag, ChevronRight, Check } from 'lucide-react';
@@ -56,6 +57,7 @@ export default async function ProdukDetail({ params }) {
           </div>
         </section>
       )}
+      <ReviewSection slug={p.slug} />
     </SiteShell>
   );
 }

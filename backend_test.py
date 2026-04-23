@@ -1,225 +1,405 @@
 #!/usr/bin/env python3
 """
-Backend test for Chocolicious image upload functionality
-Tests ONLY the newly added image upload endpoint and file serving
+Backend API Testing for Chocolicious - Product Reviews and Newsletter
+Testing only the newly added features as requested.
 """
 
 import requests
-import io
-import os
-from PIL import Image
+import json
+import time
+from datetime import datetime
 
 # Configuration
-BASE_URL = "https://choco-api-refresh.preview.emergentagent.com"
-API_BASE = f"{BASE_URL}/api"
+BASE_URL = "https://choco-api-refresh.preview.emergentagent.com/api"
 ADMIN_EMAIL = "firstahmadthahir@gmail.com"
 ADMIN_PASSWORD = "chocolicious2026"
 
-def test_image_upload():
-    """Test the complete image upload functionality"""
-    print("🧪 TESTING IMAGE UPLOAD FUNCTIONALITY")
-    print("=" * 50)
+class TestResults:
+    def __init__(self):
+        self.passed = 0
+        self.failed = 0
+        self.results = []
     
-    # Test 1: Login to get Bearer token
-    print("\n1️⃣ Testing admin login...")
-    try:
-        login_response = requests.post(f"{API_BASE}/admin/login", json={
-            "email": ADMIN_EMAIL,
-            "password": ADMIN_PASSWORD
+    def add_result(self, test_name, passed, details=""):
+        self.results.append({
+            "test": test_name,
+            "passed": passed,
+            "details": details
         })
-        
-        if login_response.status_code == 200:
-            token_data = login_response.json()
-            bearer_token = token_data.get("token")
-            print(f"✅ Login successful, token received: {bearer_token[:20]}...")
+        if passed:
+            self.passed += 1
+            print(f"✅ {test_name}")
         else:
-            print(f"❌ Login failed: {login_response.status_code} - {login_response.text}")
-            return False
-            
-    except Exception as e:
-        print(f"❌ Login error: {e}")
-        return False
+            self.failed += 1
+            print(f"❌ {test_name}: {details}")
     
-    # Test 2: Upload without token (expect 401)
-    print("\n2️⃣ Testing upload without token (expect 401)...")
+    def summary(self):
+        total = self.passed + self.failed
+        print(f"\n=== TEST SUMMARY ===")
+        print(f"Total: {total}, Passed: {self.passed}, Failed: {self.failed}")
+        return self.failed == 0
+
+def get_admin_token():
+    """Login as admin and get Bearer token"""
     try:
-        # Create a small test image
-        test_image = Image.new('RGB', (100, 100), color='red')
-        img_buffer = io.BytesIO()
-        test_image.save(img_buffer, format='PNG')
-        img_buffer.seek(0)
-        
-        files = {'file': ('test.png', img_buffer, 'image/png')}
-        upload_response = requests.post(f"{API_BASE}/admin/upload", files=files)
-        
-        if upload_response.status_code == 401:
-            print("✅ Correctly returned 401 for unauthorized upload")
+        response = requests.post(f"{BASE_URL}/admin/login", 
+                               json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD})
+        if response.status_code == 200:
+            return response.json().get("token")
         else:
-            print(f"❌ Expected 401, got {upload_response.status_code}: {upload_response.text}")
-            
+            print(f"Login failed: {response.status_code} - {response.text}")
+            return None
     except Exception as e:
-        print(f"❌ Upload without token test error: {e}")
+        print(f"Login error: {e}")
+        return None
+
+def test_product_reviews():
+    """Test Product Reviews functionality"""
+    print("\n=== TESTING PRODUCT REVIEWS ===")
+    results = TestResults()
     
-    # Test 3: Upload valid small image with Bearer token (expect 201)
-    print("\n3️⃣ Testing valid image upload with token (expect 201)...")
+    # Test data
+    product_slug = "cake-blackforest"
+    review_data = {
+        "name": "Budi",
+        "comment": "Mantap",
+        "rating": 5
+    }
+    
+    review_id = None
+    
     try:
-        # Create a small test image
-        test_image = Image.new('RGB', (200, 200), color='blue')
-        img_buffer = io.BytesIO()
-        test_image.save(img_buffer, format='PNG')
-        img_buffer.seek(0)
+        # 1. POST review (public, no token) - should create with approved=false
+        print("\n1. Testing POST review (public)")
+        response = requests.post(f"{BASE_URL}/products/{product_slug}/reviews", 
+                               json=review_data)
         
-        files = {'file': ('valid_test.png', img_buffer, 'image/png')}
-        headers = {'Authorization': f'Bearer {bearer_token}'}
-        
-        upload_response = requests.post(f"{API_BASE}/admin/upload", files=files, headers=headers)
-        
-        if upload_response.status_code == 201:
-            upload_data = upload_response.json()
-            print("✅ Image upload successful!")
-            print(f"   Response: {upload_data}")
-            
-            # Validate response structure
-            required_keys = ['ok', 'url', 'path', 'size', 'contentType']
-            missing_keys = [key for key in required_keys if key not in upload_data]
-            if missing_keys:
-                print(f"❌ Missing response keys: {missing_keys}")
+        if response.status_code == 201:
+            data = response.json()
+            if (data.get("ok") and 
+                data.get("data", {}).get("approved") == False and 
+                "disetujui admin" in data.get("message", "")):
+                review_id = data.get("data", {}).get("id")
+                results.add_result("POST review creates unapproved review", True)
             else:
-                print("✅ Response has all required keys")
-                
-            # Validate response values
-            if upload_data.get('ok') != True:
-                print(f"❌ Expected ok=true, got {upload_data.get('ok')}")
-            elif not upload_data.get('url', '').startswith('/api/files/chocolicious/uploads/'):
-                print(f"❌ URL doesn't start with expected prefix: {upload_data.get('url')}")
-            elif upload_data.get('size', 0) <= 0:
-                print(f"❌ Size should be > 0, got {upload_data.get('size')}")
-            elif not upload_data.get('contentType', '').startswith('image/'):
-                print(f"❌ ContentType should start with 'image/', got {upload_data.get('contentType')}")
-            else:
-                print("✅ All response values are valid")
-                
-                # Store for next test
-                file_url = upload_data.get('url')
-                
+                results.add_result("POST review creates unapproved review", False, 
+                                 f"Expected approved=false and admin message, got: {data}")
         else:
-            print(f"❌ Expected 201, got {upload_response.status_code}: {upload_response.text}")
-            return False
-            
-    except Exception as e:
-        print(f"❌ Valid image upload test error: {e}")
-        return False
-    
-    # Test 4: GET the returned URL (expect 200 with correct content-type)
-    print("\n4️⃣ Testing file retrieval...")
-    try:
-        if file_url:
-            # Convert relative URL to absolute
-            full_file_url = f"{BASE_URL}{file_url}"
-            file_response = requests.get(full_file_url)
-            
-            if file_response.status_code == 200:
-                content_type = file_response.headers.get('content-type', '')
-                content_length = len(file_response.content)
-                
-                if content_type.startswith('image/'):
-                    print(f"✅ File retrieved successfully!")
-                    print(f"   Content-Type: {content_type}")
-                    print(f"   Content-Length: {content_length} bytes")
+            results.add_result("POST review creates unapproved review", False, 
+                             f"Expected 201, got {response.status_code}: {response.text}")
+        
+        # 2. GET reviews (public) - unapproved review should NOT appear
+        print("\n2. Testing GET reviews (unapproved should not appear)")
+        response = requests.get(f"{BASE_URL}/products/{product_slug}/reviews")
+        
+        if response.status_code == 200:
+            data = response.json()
+            if ("data" in data and "count" in data and "average" in data and
+                isinstance(data["data"], list) and
+                isinstance(data["count"], int) and
+                isinstance(data["average"], (int, float))):
+                # Check that our unapproved review is NOT in the list
+                review_found = any(r.get("id") == review_id for r in data["data"])
+                if not review_found:
+                    results.add_result("GET reviews excludes unapproved reviews", True)
                 else:
-                    print(f"❌ Expected image/* content-type, got: {content_type}")
-                    
-                if content_length > 0:
-                    print("✅ File has content (size > 0)")
-                else:
-                    print("❌ File appears to be empty")
-                    
+                    results.add_result("GET reviews excludes unapproved reviews", False,
+                                     "Unapproved review appeared in public list")
             else:
-                print(f"❌ File retrieval failed: {file_response.status_code}")
+                results.add_result("GET reviews excludes unapproved reviews", False,
+                                 f"Invalid response structure: {data}")
         else:
-            print("❌ No file URL to test")
+            results.add_result("GET reviews excludes unapproved reviews", False,
+                             f"Expected 200, got {response.status_code}: {response.text}")
+        
+        # 3. Admin login and approve review
+        print("\n3. Testing admin review approval")
+        token = get_admin_token()
+        if token and review_id:
+            headers = {"Authorization": f"Bearer {token}"}
+            response = requests.put(f"{BASE_URL}/admin/reviews/{review_id}",
+                                  json={"approved": True}, headers=headers)
             
+            if response.status_code == 200:
+                results.add_result("Admin approve review", True)
+            else:
+                results.add_result("Admin approve review", False,
+                                 f"Expected 200, got {response.status_code}: {response.text}")
+        else:
+            results.add_result("Admin approve review", False, "No token or review_id")
+        
+        # 4. GET reviews again - approved review should now appear
+        print("\n4. Testing GET reviews (approved should appear)")
+        response = requests.get(f"{BASE_URL}/products/{product_slug}/reviews")
+        
+        if response.status_code == 200:
+            data = response.json()
+            if (data.get("count", 0) >= 1 and 
+                isinstance(data.get("average"), (int, float)) and
+                1 <= data.get("average") <= 5):
+                results.add_result("GET reviews includes approved reviews", True)
+            else:
+                results.add_result("GET reviews includes approved reviews", False,
+                                 f"Expected count>=1 and valid average, got: {data}")
+        else:
+            results.add_result("GET reviews includes approved reviews", False,
+                             f"Expected 200, got {response.status_code}: {response.text}")
+        
+        # 5. Test validation - missing comment
+        print("\n5. Testing validation - missing comment")
+        invalid_data = {"name": "Test", "rating": 5}  # missing comment
+        response = requests.post(f"{BASE_URL}/products/{product_slug}/reviews", 
+                               json=invalid_data)
+        
+        if response.status_code == 400:
+            results.add_result("Validation rejects missing comment", True)
+        else:
+            results.add_result("Validation rejects missing comment", False,
+                             f"Expected 400, got {response.status_code}: {response.text}")
+        
+        # 6. Test validation - rating clamping (API clamps ratings to 1-5 range)
+        print("\n6. Testing rating clamping behavior")
+        invalid_data = {"name": "Test", "comment": "Test comment", "rating": 0}
+        response = requests.post(f"{BASE_URL}/products/{product_slug}/reviews", 
+                               json=invalid_data)
+        
+        if response.status_code == 201:
+            data = response.json()
+            if data.get("data", {}).get("rating") == 1:
+                results.add_result("Rating 0 clamped to 1", True)
+            else:
+                results.add_result("Rating 0 clamped to 1", False,
+                                 f"Expected rating=1, got: {data.get('data', {}).get('rating')}")
+        else:
+            results.add_result("Rating 0 clamped to 1", False,
+                             f"Expected 201, got {response.status_code}: {response.text}")
+        
+        invalid_data = {"name": "Test", "comment": "Test comment", "rating": 6}
+        response = requests.post(f"{BASE_URL}/products/{product_slug}/reviews", 
+                               json=invalid_data)
+        
+        if response.status_code == 201:
+            data = response.json()
+            if data.get("data", {}).get("rating") == 5:
+                results.add_result("Rating 6 clamped to 5", True)
+            else:
+                results.add_result("Rating 6 clamped to 5", False,
+                                 f"Expected rating=5, got: {data.get('data', {}).get('rating')}")
+        else:
+            results.add_result("Rating 6 clamped to 5", False,
+                             f"Expected 201, got {response.status_code}: {response.text}")
+        
+        # 7. Test non-existent product
+        print("\n7. Testing non-existent product")
+        response = requests.post(f"{BASE_URL}/products/slug-tidak-ada/reviews", 
+                               json=review_data)
+        
+        if response.status_code == 404:
+            results.add_result("Non-existent product returns 404", True)
+        else:
+            results.add_result("Non-existent product returns 404", False,
+                             f"Expected 404, got {response.status_code}: {response.text}")
+        
+        # 8. Test DELETE without token
+        print("\n8. Testing DELETE review without token")
+        if review_id:
+            response = requests.delete(f"{BASE_URL}/admin/reviews/{review_id}")
+            
+            if response.status_code == 401:
+                results.add_result("DELETE review without token returns 401", True)
+            else:
+                results.add_result("DELETE review without token returns 401", False,
+                                 f"Expected 401, got {response.status_code}: {response.text}")
+        
+        # 9. Test DELETE with token
+        print("\n9. Testing DELETE review with token")
+        if token and review_id:
+            headers = {"Authorization": f"Bearer {token}"}
+            response = requests.delete(f"{BASE_URL}/admin/reviews/{review_id}", headers=headers)
+            
+            if response.status_code == 200:
+                results.add_result("DELETE review with token succeeds", True)
+            else:
+                results.add_result("DELETE review with token succeeds", False,
+                                 f"Expected 200, got {response.status_code}: {response.text}")
+        
     except Exception as e:
-        print(f"❌ File retrieval test error: {e}")
+        results.add_result("Product Reviews Test Suite", False, f"Exception: {e}")
     
-    # Test 5: Upload non-image file (expect 400)
-    print("\n5️⃣ Testing non-image file upload (expect 400)...")
+    return results
+
+def test_newsletter():
+    """Test Newsletter functionality"""
+    print("\n=== TESTING NEWSLETTER ===")
+    results = TestResults()
+    
+    # Generate unique email with timestamp
+    timestamp = int(time.time())
+    unique_email = f"test-{timestamp}@example.com"
+    newsletter_id = None
+    
     try:
-        # Create a text file
-        text_content = "This is a test text file, not an image" * 2  # ~50 bytes
-        text_buffer = io.BytesIO(text_content.encode('utf-8'))
+        # 1. POST subscribe with unique email
+        print(f"\n1. Testing POST subscribe with {unique_email}")
+        response = requests.post(f"{BASE_URL}/newsletter/subscribe", 
+                               json={"email": unique_email})
         
-        files = {'file': ('test.txt', text_buffer, 'text/plain')}
-        headers = {'Authorization': f'Bearer {bearer_token}'}
-        
-        upload_response = requests.post(f"{API_BASE}/admin/upload", files=files, headers=headers)
-        
-        if upload_response.status_code == 400:
-            response_data = upload_response.json()
-            print("✅ Correctly rejected non-image file with 400")
-            print(f"   Error message: {response_data.get('error', 'No error message')}")
+        if response.status_code == 201:
+            data = response.json()
+            if (data.get("ok") == True and 
+                ("berlangganan" in data.get("message", "") or "Terima kasih" in data.get("message", ""))):
+                results.add_result("Newsletter subscribe creates new subscription", True)
+            else:
+                results.add_result("Newsletter subscribe creates new subscription", False,
+                                 f"Expected ok=true and success message, got: {data}")
         else:
-            print(f"❌ Expected 400, got {upload_response.status_code}: {upload_response.text}")
-            
-    except Exception as e:
-        print(f"❌ Non-image upload test error: {e}")
-    
-    # Test 6: Upload >5MB file (expect 413)
-    print("\n6️⃣ Testing large file upload >5MB (expect 413)...")
-    try:
-        # Create a large image (~6MB)
-        large_image = Image.new('RGB', (2000, 2000), color='green')
-        img_buffer = io.BytesIO()
-        large_image.save(img_buffer, format='PNG')
-        img_buffer.seek(0)
+            results.add_result("Newsletter subscribe creates new subscription", False,
+                             f"Expected 201, got {response.status_code}: {response.text}")
         
-        # Check if the image is actually > 5MB
-        img_size = len(img_buffer.getvalue())
-        print(f"   Generated image size: {img_size / (1024*1024):.2f} MB")
+        # 2. POST same email again - should be idempotent
+        print(f"\n2. Testing POST same email again (idempotent)")
+        response = requests.post(f"{BASE_URL}/newsletter/subscribe", 
+                               json={"email": unique_email})
         
-        if img_size <= 5 * 1024 * 1024:
-            # If not large enough, create raw bytes
-            large_data = b'0' * (6 * 1024 * 1024)  # 6MB of zeros
-            img_buffer = io.BytesIO(large_data)
-            print(f"   Using raw data size: {len(large_data) / (1024*1024):.2f} MB")
-        
-        files = {'file': ('large_test.png', img_buffer, 'image/png')}
-        headers = {'Authorization': f'Bearer {bearer_token}'}
-        
-        upload_response = requests.post(f"{API_BASE}/admin/upload", files=files, headers=headers)
-        
-        if upload_response.status_code == 413:
-            response_data = upload_response.json()
-            print("✅ Correctly rejected large file with 413")
-            print(f"   Error message: {response_data.get('error', 'No error message')}")
+        if response.status_code == 200:
+            data = response.json()
+            if "sudah terdaftar" in data.get("message", ""):
+                results.add_result("Newsletter subscribe is idempotent", True)
+            else:
+                results.add_result("Newsletter subscribe is idempotent", False,
+                                 f"Expected 'sudah terdaftar' message, got: {data}")
         else:
-            print(f"❌ Expected 413, got {upload_response.status_code}: {upload_response.text}")
-            
-    except Exception as e:
-        print(f"❌ Large file upload test error: {e}")
-    
-    # Test 7: Missing "file" field (expect 400)
-    print("\n7️⃣ Testing missing file field (expect 400)...")
-    try:
-        headers = {'Authorization': f'Bearer {bearer_token}'}
+            results.add_result("Newsletter subscribe is idempotent", False,
+                             f"Expected 200, got {response.status_code}: {response.text}")
         
-        # Send multipart request with wrong field name
-        files = {'wrong_field': ('test.png', io.BytesIO(b'fake image data'), 'image/png')}
-        upload_response = requests.post(f"{API_BASE}/admin/upload", files=files, headers=headers)
+        # 3. Test invalid email
+        print("\n3. Testing invalid email")
+        response = requests.post(f"{BASE_URL}/newsletter/subscribe", 
+                               json={"email": "bukan-email"})
         
-        if upload_response.status_code == 400:
-            response_data = upload_response.json()
-            print("✅ Correctly rejected missing file field with 400")
-            print(f"   Error message: {response_data.get('error', 'No error message')}")
+        if response.status_code == 400:
+            data = response.json()
+            if "Email tidak valid" in data.get("error", ""):
+                results.add_result("Newsletter rejects invalid email", True)
+            else:
+                results.add_result("Newsletter rejects invalid email", False,
+                                 f"Expected 'Email tidak valid' error, got: {data}")
         else:
-            print(f"❌ Expected 400, got {upload_response.status_code}: {upload_response.text}")
+            results.add_result("Newsletter rejects invalid email", False,
+                             f"Expected 400, got {response.status_code}: {response.text}")
+        
+        # 4. Test empty email
+        print("\n4. Testing empty email")
+        response = requests.post(f"{BASE_URL}/newsletter/subscribe", 
+                               json={"email": ""})
+        
+        if response.status_code == 400:
+            results.add_result("Newsletter rejects empty email", True)
+        else:
+            results.add_result("Newsletter rejects empty email", False,
+                             f"Expected 400, got {response.status_code}: {response.text}")
+        
+        # 5. Admin GET newsletter list with token
+        print("\n5. Testing admin GET newsletter list")
+        token = get_admin_token()
+        if token:
+            headers = {"Authorization": f"Bearer {token}"}
+            response = requests.get(f"{BASE_URL}/admin/newsletter", headers=headers)
             
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data.get("data"), list):
+                    # Find our email in the list
+                    found_email = any(item.get("email") == unique_email for item in data["data"])
+                    if found_email:
+                        # Get the ID for deletion test
+                        for item in data["data"]:
+                            if item.get("email") == unique_email:
+                                newsletter_id = item.get("id")
+                                break
+                        results.add_result("Admin GET newsletter includes new email", True)
+                    else:
+                        results.add_result("Admin GET newsletter includes new email", False,
+                                         f"Email {unique_email} not found in list")
+                else:
+                    results.add_result("Admin GET newsletter includes new email", False,
+                                     f"Expected data array, got: {data}")
+            else:
+                results.add_result("Admin GET newsletter includes new email", False,
+                                 f"Expected 200, got {response.status_code}: {response.text}")
+        else:
+            results.add_result("Admin GET newsletter includes new email", False, "No admin token")
+        
+        # 6. GET newsletter without token
+        print("\n6. Testing GET newsletter without token")
+        response = requests.get(f"{BASE_URL}/admin/newsletter")
+        
+        if response.status_code == 401:
+            results.add_result("GET newsletter without token returns 401", True)
+        else:
+            results.add_result("GET newsletter without token returns 401", False,
+                             f"Expected 401, got {response.status_code}: {response.text}")
+        
+        # 7. DELETE newsletter with token
+        print("\n7. Testing DELETE newsletter with token")
+        if token and newsletter_id:
+            headers = {"Authorization": f"Bearer {token}"}
+            response = requests.delete(f"{BASE_URL}/admin/newsletter/{newsletter_id}", headers=headers)
+            
+            if response.status_code == 200:
+                results.add_result("DELETE newsletter with token succeeds", True)
+                
+                # Verify it's gone from the list
+                response = requests.get(f"{BASE_URL}/admin/newsletter", headers=headers)
+                if response.status_code == 200:
+                    data = response.json()
+                    found_email = any(item.get("email") == unique_email for item in data.get("data", []))
+                    if not found_email:
+                        results.add_result("Deleted newsletter removed from list", True)
+                    else:
+                        results.add_result("Deleted newsletter removed from list", False,
+                                         "Email still appears in list after deletion")
+            else:
+                results.add_result("DELETE newsletter with token succeeds", False,
+                                 f"Expected 200, got {response.status_code}: {response.text}")
+        else:
+            results.add_result("DELETE newsletter with token succeeds", False, "No token or newsletter_id")
+        
     except Exception as e:
-        print(f"❌ Missing file field test error: {e}")
+        results.add_result("Newsletter Test Suite", False, f"Exception: {e}")
     
-    print("\n" + "=" * 50)
-    print("🎉 IMAGE UPLOAD TESTING COMPLETED")
-    return True
+    return results
+
+def main():
+    """Run all tests"""
+    print("=== CHOCOLICIOUS BACKEND API TESTING ===")
+    print("Testing Product Reviews and Newsletter endpoints only")
+    print(f"Base URL: {BASE_URL}")
+    print(f"Admin: {ADMIN_EMAIL}")
+    
+    # Test Product Reviews
+    review_results = test_product_reviews()
+    
+    # Test Newsletter
+    newsletter_results = test_newsletter()
+    
+    # Combined summary
+    total_passed = review_results.passed + newsletter_results.passed
+    total_failed = review_results.failed + newsletter_results.failed
+    total_tests = total_passed + total_failed
+    
+    print(f"\n=== FINAL SUMMARY ===")
+    print(f"Product Reviews: {review_results.passed}/{review_results.passed + review_results.failed} passed")
+    print(f"Newsletter: {newsletter_results.passed}/{newsletter_results.passed + newsletter_results.failed} passed")
+    print(f"TOTAL: {total_passed}/{total_tests} tests passed")
+    
+    if total_failed == 0:
+        print("🎉 ALL TESTS PASSED!")
+        return True
+    else:
+        print(f"❌ {total_failed} tests failed")
+        return False
 
 if __name__ == "__main__":
-    test_image_upload()
+    success = main()
+    exit(0 if success else 1)
