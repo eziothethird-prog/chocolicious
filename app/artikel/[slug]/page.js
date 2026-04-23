@@ -30,7 +30,11 @@ export default async function ArtikelDetail({ params }) {
           <h1 className="font-display text-3xl md:text-5xl text-choco-dark mt-3 leading-tight">{a.title}</h1>
           <div className="flex items-center gap-3 text-xs text-choco-milk mt-4"><Calendar size={14}/>{new Date(a.publishedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
           <div className="aspect-[16/9] rounded-2xl overflow-hidden my-8"><img src={a.thumbnail} alt={a.title} className="w-full h-full object-cover"/></div>
-          <div className="prose prose-lg max-w-none text-choco-dark/90 leading-relaxed whitespace-pre-line">{a.content}</div>
+          {a.content && String(a.content).trim().startsWith('<') ? (
+            <div className="prose prose-lg max-w-none prose-headings:font-display prose-headings:text-choco-dark prose-p:text-choco-dark/90 prose-img:rounded-xl prose-a:text-choco-gold" dangerouslySetInnerHTML={{ __html: a.content }} />
+          ) : (
+            <div className="prose prose-lg max-w-none text-choco-dark/90 leading-relaxed whitespace-pre-line">{a.content}</div>
+          )}
         </div>
       </article>
     </SiteShell>

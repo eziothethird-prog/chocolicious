@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongo';
 import { SEED } from '@/lib/seed';
+import { putObject, buildPath, MIME_TO_EXT } from '@/lib/storage';
 import { v4 as uuid } from 'uuid';
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'firstahmadthahir@gmail.com';
@@ -151,6 +152,37 @@ async function handle(req, { params }) {
     const user = await getAuthUser(req);
     if (!user) return json({ error: 'Unauthorized' }, 401);
     return json({ email: user.email });
+  }
+
+  // --- ADMIN FILE UPLOAD ---
+  if (method === 'POST' && path === 'admin/upload') {
+    const user = await getAuthUser(req);
+    if (!user) return json({ error: 'Unauthorized' }, 401);
+    try {
+      const form = await req.formData();
+      const file = form.get('file');
+      if (!file || typeof file === 'string') return json({ error: 'Missing file' }, 400);
+      if (file.size > 5 * 1024 * 1024) return json({ error: 'File > 5MB' }, 413);
+      const contentType = file.type || 'application/octet-stream';
+      if (!contentType.startsWith('image/')) return json({ error: 'Hanya gambar yang diperbolehkan' }, 400);
+      const ext = MIME_TO_EXT[contentType] || (file.name?.split('.').pop() || 'bin');
+      const storagePath = buildPath(ext);
+      const bytes = Buffer.from(await file.arrayBuffer());
+      const result = await putObject(storagePath, bytes, contentType);
+      await db.collection('files').insertOne({
+        id: uuid(),
+        storagePath: result.path || storagePath,
+        filename: file.name || null,
+        contentType,
+        size: result.size || bytes.length,
+        uploadedBy: user.email,
+        createdAt: new Date().toISOString(),
+      });
+      const url = `/api/files/${result.path || storagePath}`;
+      return json({ ok: true, url, path: result.path || storagePath, size: result.size || bytes.length, contentType }, 201);
+    } catch (e) {
+      return json({ error: 'Upload gagal', detail: String(e.message || e) }, 500);
+    }
   }
 
   // --- ADMIN CRUD ---

@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LogOut, Package, FileText, Store, Star, Plus, Edit, Trash2, X, Check } from 'lucide-react';
 import { toast } from 'sonner';
+import ImageUploader from '@/components/admin/ImageUploader';
+import RichTextEditor from '@/components/admin/RichTextEditor';
 
 const TABS = [
   { key: 'products', label: 'Produk', icon: Package },
@@ -17,7 +19,7 @@ const FIELDS = {
     { key: 'slug', label: 'Slug (otomatis jika kosong)', type: 'text' },
     { key: 'category', label: 'Kategori (slug)', type: 'text', required: true, hint: 'cake, brownies, tiramisu, mini-cheese-cake, cheese-pie, snack, snack-tradisional, bread' },
     { key: 'price', label: 'Harga (Rp)', type: 'number', required: true },
-    { key: 'image', label: 'URL Gambar', type: 'url', required: true },
+    { key: 'image', label: 'Gambar produk', type: 'image', required: true },
     { key: 'description', label: 'Deskripsi', type: 'textarea' },
     { key: 'featured', label: 'Featured (unggulan)', type: 'checkbox' },
     { key: 'active', label: 'Aktif', type: 'checkbox' },
@@ -26,9 +28,9 @@ const FIELDS = {
     { key: 'title', label: 'Judul', type: 'text', required: true },
     { key: 'slug', label: 'Slug (otomatis)', type: 'text' },
     { key: 'category', label: 'Kategori', type: 'text' },
-    { key: 'thumbnail', label: 'URL Thumbnail', type: 'url' },
+    { key: 'thumbnail', label: 'Thumbnail', type: 'image' },
     { key: 'excerpt', label: 'Ringkasan', type: 'textarea' },
-    { key: 'content', label: 'Konten', type: 'textarea', rows: 8 },
+    { key: 'content', label: 'Konten', type: 'richtext' },
     { key: 'meta_title', label: 'Meta Title (SEO)', type: 'text' },
     { key: 'meta_description', label: 'Meta Description (SEO)', type: 'textarea' },
     { key: 'published', label: 'Publish', type: 'checkbox' },
@@ -46,7 +48,7 @@ const FIELDS = {
     { key: 'name', label: 'Nama', type: 'text', required: true },
     { key: 'role', label: 'Profesi / Role', type: 'text' },
     { key: 'message', label: 'Pesan', type: 'textarea', required: true },
-    { key: 'image', label: 'URL Foto', type: 'url' },
+    { key: 'image', label: 'Foto', type: 'image' },
     { key: 'active', label: 'Aktif', type: 'checkbox' },
   ],
 };
@@ -205,7 +207,11 @@ export default function Dashboard() {
               {fields.map(f => (
                 <div key={f.key}>
                   <label className="text-sm font-medium text-choco-dark">{f.label}{f.required && <span className="text-red-500"> *</span>}</label>
-                  {f.type === 'textarea' ? (
+                  {f.type === 'image' ? (
+                    <div className="mt-1"><ImageUploader value={form[f.key]} onChange={(v)=>setForm({...form, [f.key]: v})} token={token}/></div>
+                  ) : f.type === 'richtext' ? (
+                    <div className="mt-1"><RichTextEditor value={form[f.key] || ''} onChange={(html)=>setForm({...form, [f.key]: html})} token={token}/></div>
+                  ) : f.type === 'textarea' ? (
                     <textarea rows={f.rows || 3} value={form[f.key] ?? ''} onChange={e=>setForm({...form, [f.key]: e.target.value})} className="mt-1 w-full px-3 py-2 rounded-lg border border-choco-cream focus:border-choco-gold focus:outline-none"/>
                   ) : f.type === 'checkbox' ? (
                     <label className="mt-1 flex items-center gap-2 text-sm text-choco-milk">

@@ -170,6 +170,21 @@ backend:
           agent: "testing"
           comment: "✅ SEO ROUTES WORKING: GET /sitemap.xml returns 200 with application/xml content-type, includes /produk and /artikel URLs. GET /robots.txt returns 200 with text/plain content-type, contains 'Disallow: /admin' rule."
 
+  - task: "Image upload via Emergent Object Storage"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js, /app/app/api/files/[...path]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "POST /api/admin/upload accepts multipart 'file' field, requires Bearer token. Only image/* files, max 5MB. Returns 201 with {ok, url, path, size, contentType}. GET /api/files/<path> serves uploaded files. Uses Emergent Object Storage."
+        - working: true
+          agent: "testing"
+          comment: "✅ IMAGE UPLOAD WORKING: All 7 test scenarios passed. Login successful, unauthorized upload returns 401, valid image upload returns 201 with correct response structure (ok=true, url starts with /api/files/chocolicious/uploads/, size>0, contentType=image/*), file retrieval returns 200 with correct content-type and content, non-image file rejected with 400, >5MB file rejected with 413, missing file field rejected with 400. Emergent Object Storage integration working correctly."
+
 frontend:
   - task: "Public pages (Home, Produk, Detail produk, Tentang, Cabang, Artikel, FAQ, Kontak)"
     implemented: true
@@ -212,29 +227,23 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Public REST API (categories, products, branches, testimonials, articles, faqs)"
-    - "Admin authentication (login/logout/me) + Bearer token"
-    - "Admin CRUD (products, articles, branches, testimonials, faqs, categories)"
+    - "Image upload via Emergent Object Storage"
   stuck_tasks: []
-  test_all: true
+  test_all: false
   test_priority: "high_first"
 
 agent_communication:
     - agent: "main"
       message: |
-        MVP Chocolicious redesign siap untuk testing backend. Silakan test all backend endpoints.
-        Base URL publik: NEXT_PUBLIC_BASE_URL di /app/.env (pakai /api prefix).
-        Credentials admin: email=firstahmadthahir@gmail.com, password=chocolicious2026.
-        Database auto-seed pada request pertama (kategori, produk, cabang, testimoni, artikel, faq).
-        Endpoint utama yang perlu diverifikasi:
-          - GET /api/health
-          - GET /api/categories, /api/products, /api/products?category=cake, /api/products?featured=true
-          - GET /api/products/cake-blackforest (slug dari seed)
-          - GET /api/branches, /api/testimonials, /api/articles, /api/articles/<slug>, /api/faqs
-          - POST /api/admin/login (happy path + wrong credentials => 401)
-          - GET /api/admin/me dengan Bearer token
-          - Admin CRUD: POST /api/admin/products lalu PUT lalu DELETE
-          - Unauthorized access ke /api/admin/products tanpa token => 401
+        Paket 1 iterasi: image upload endpoint added. Please test ONLY the new
+        upload functionality:
+          - POST /api/admin/upload requires Bearer token (use /api/admin/login).
+          - Multipart field name is "file". Accept only image/*, max 5MB.
+          - Response 201: {ok, url, path, size, contentType}. "url" is /api/files/<path>.
+          - GET /api/files/<path> should return the image bytes (public, 200).
+          - Without token => 401. Non-image file => 400. >5MB => 413.
+        Existing backend tasks (public API, auth, CRUD, SEO routes) already passed
+        previously; no need to re-run those.
     - agent: "testing"
       message: |
         🎉 BACKEND TESTING COMPLETE - ALL TESTS PASSED (31/31)
@@ -282,3 +291,21 @@ agent_communication:
         - Minor: Edit/Delete button selectors need adjustment but core functionality intact
         
         RECOMMENDATION: Frontend is production-ready. Minor UI selector issues don't affect core functionality.
+    - agent: "testing"
+      message: |
+        🎉 IMAGE UPLOAD TESTING COMPLETE - ALL TESTS PASSED (7/7)
+        
+        Comprehensive testing completed for the newly added image upload functionality:
+        
+        ✅ IMAGE UPLOAD SCENARIOS (7/7 passed):
+        1. Admin login successful - Bearer token obtained
+        2. Upload without token → 401 (Unauthorized) ✓
+        3. Valid image upload with token → 201 with correct response structure ✓
+           - Response contains: ok=true, url=/api/files/chocolicious/uploads/*, path, size>0, contentType=image/*
+        4. File retrieval via GET /api/files/<path> → 200 with correct Content-Type ✓
+        5. Non-image file upload → 400 with error "Hanya gambar yang diperbolehkan" ✓
+        6. Large file >5MB upload → 413 with error "File > 5MB" ✓
+        7. Missing file field → 400 with error "Missing file" ✓
+        
+        Emergent Object Storage integration working correctly. All authentication, validation, and file serving functionality operational.
+        Image upload feature is production-ready.
